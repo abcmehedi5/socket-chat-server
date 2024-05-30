@@ -10,6 +10,7 @@ const server = createServer(app);
 app.use(cors());
 app.use(express.json()); // Middleware to parse JSON requests
 
+// Setup Socket.IO server with CORS configuration
 const io = new Server(server, {
   cors: {
     origin: "http://localhost:5173",
@@ -31,6 +32,7 @@ mongoose.connection.on("error", (err) => {
   console.error("Error connecting to MongoDB:", err);
 });
 
+// Define the User schema and model
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true },
   password: String,
@@ -38,6 +40,7 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", userSchema);
 
+// Register endpoint
 app.post("/register", async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -49,6 +52,7 @@ app.post("/register", async (req, res) => {
   }
 });
 
+// Login endpoint
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -63,29 +67,45 @@ app.post("/login", async (req, res) => {
   }
 });
 
-let onlineUsers = {};
+// Online users tracking
+let onlineUsers = {}; // { socket.id: username }
+let userSockets = {}; // { username: socket.id }
 
+// Socket.IO connection event
 io.on("connection", (socket) => {
-  console.log("a user connected");
+  console.log("A user connected");
 
+  // Handle user connection
   socket.on("user_connected", (username) => {
     onlineUsers[socket.id] = username;
+    userSockets[username] = socket.id;
     io.emit("update_user_list", Object.values(onlineUsers));
     console.log(`User connected: ${username}`);
   });
 
-  socket.on("send_message", (data) => {
-    io.emit("received_message", data);
+  // Handle private message sending
+  socket.on("send_private_message", ({ recipient, message }) => {
+    const sender = onlineUsers[socket.id];
+    const recipientSocketId = userSockets[recipient];
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit("received_private_message", {
+        sender,
+        message,
+      });
+    }
   });
 
+  // Handle user disconnection
   socket.on("disconnect", () => {
     const username = onlineUsers[socket.id];
     delete onlineUsers[socket.id];
+    delete userSockets[username];
     io.emit("update_user_list", Object.values(onlineUsers));
     console.log(`User disconnected: ${username}`);
   });
 });
 
+// Start the server
 server.listen(5000, () => {
-  console.log("server running at http://localhost:5000");
+  console.log("Server running at http://localhost:5000");
 });
