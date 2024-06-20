@@ -92,6 +92,7 @@ io.on("connection", (socket) => {
         sender,
         message,
       });
+      io.to(recipientSocketId).emit("show_notification", sender); // Notify recipient
     }
   });
 
